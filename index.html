@@ -1,0 +1,565 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale-1.0">
+    <title>Cab Pickup Tracker</title>
+    <script src="https://cdn.tailwindcss.com"></script>
+    <!-- NEW: Added Tone.js for sound effects -->
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/tone/14.8.49/Tone.min.js"></script>
+    <style>
+        /* A simple class to hide/show views */
+        .view { display: none; }
+        /* Style for the selected location button */
+        .selected-btn { 
+            background-color: #2563EB !important; /* blue-600 */
+            color: white !important;
+            border-color: #1D4ED8 !important; /* blue-700 */
+            box-shadow: 0 4px 6px -1px rgb(0 0 0 / 0.1), 0 2px 4px -2px rgb(0 0 0 / 0.1);
+        }
+        /* Custom scrollbar for the student list */
+        #student-list-container::-webkit-scrollbar { width: 8px; }
+        #student-list-container::-webkit-scrollbar-track { background: #f1f1f1; border-radius: 10px; }
+        #student-list-container::-webkit-scrollbar-thumb { background: #888; border-radius: 10px; }
+        #student-list-container::-webkit-scrollbar-thumb:hover { background: #555; }
+        
+        /* --- STYLES FOR LIVE MAP --- */
+        #map-container {
+            position: relative; /* This is the anchor for the red dot */
+            width: 100%;
+            border-radius: 0.5rem; /* 8px */
+            overflow: hidden; /* Keeps the image corners rounded */
+            box-shadow: 0 4px 6px -1px rgb(0 0 0 / 0.1), 0 2px 4px -2px rgb(0 0 0 / 0.1);
+        }
+        #map-image {
+            width: 100%;
+            height: auto;
+            display: block;
+        }
+        #driver-dot {
+            position: absolute; /* This dot will move on top of the map */
+            width: 16px;
+            height: 16px;
+            background-color: red;
+            border: 2px solid white;
+            border-radius: 50%;
+            box-shadow: 0 0 10px rgba(0,0,0,0.5);
+            transform: translate(-50%, -50%); /* Centers the dot on its coordinate */
+            display: none; /* Hidden by default */
+            transition: top 0.5s linear, left 0.5s linear; /* Smooth movement */
+        }
+    </style>
+</head>
+<body class="bg-gray-100 font-sans antialiased">
+
+    <div id="app-container" class="container mx-auto p-4 max-w-2xl min-h-screen flex flex-col">
+
+        <!-- ===== LOGIN VIEW ===== -->
+        <div id="login-view" class="view flex-grow flex flex-col items-center justify-center text-center">
+            <h1 class="text-4xl sm:text-5xl font-bold text-gray-800 mb-2">Cab Pickup Tracker</h1>
+            <p class="text-gray-600 mb-8">Please log in to continue.</p>
+            <div class="w-full max-w-xs space-y-4">
+                <button id="studentLoginBtn" class="w-full bg-blue-600 text-white font-bold py-3 px-4 rounded-lg shadow-lg hover:bg-blue-700 transition-transform transform hover:scale-105">
+                    Student Login
+                </button>
+                <button id="driverLoginBtn" class="w-full bg-green-600 text-white font-bold py-3 px-4 rounded-lg shadow-lg hover:bg-green-700 transition-transform transform hover:scale-105">
+                    Driver Login
+                </button>
+            </div>
+        </div>
+
+        <!-- ===== PROFILE CREATION VIEW ===== -->
+        <div id="profile-view" class="view flex-grow flex flex-col items-center justify-center">
+            <div class="w-full max-w-sm bg-white p-6 rounded-lg shadow-xl">
+                <h2 class="text-2xl font-bold text-gray-800 mb-4 text-center">Set Up Your Profile</h2>
+                <p class="text-center text-gray-500 mb-6">We need this information just once.</p>
+                <input id="nameInput" type="text" placeholder="Your Full Name" class="w-full p-3 border border-gray-300 rounded-md mb-4 focus:ring-2 focus:ring-blue-500 focus:outline-none transition">
+                <input id="phoneInput" type="tel" placeholder="Your 10-Digit Phone Number" class="w-full p-3 border border-gray-300 rounded-md mb-6 focus:ring-2 focus:ring-blue-500 focus:outline-none transition">
+                <button id="saveProfileBtn" class="w-full bg-blue-600 text-white font-bold py-3 px-4 rounded-lg hover:bg-blue-700 transition-all">Save Profile</button>
+            </div>
+        </div>
+        
+        <!-- ===== MAIN APP VIEW (Container for both dashboards) ===== -->
+        <div id="app-view" class="view flex-grow flex flex-col">
+            <header class="flex justify-between items-center mb-4 pb-4 border-b border-gray-200">
+                 <h1 id="header-title" class="text-2xl font-bold text-gray-800">Dashboard</h1>
+                 <button id="logoutBtn" class="bg-red-500 text-white text-sm font-bold py-2 px-4 rounded-md hover:bg-red-600 transition-all">Logout</button>
+            </header>
+
+            <div id="announcement-banner" class="hidden bg-yellow-100 border-l-4 border-yellow-500 text-yellow-800 p-4 mb-4 rounded-md shadow-md">
+                <p class="font-bold">Driver's Note:</p>
+                <p id="announcement-text" class="text-sm"></p>
+            </div>
+
+            <!-- == STUDENT DASHBOARD == -->
+            <div id="student-dashboard">
+                 <p class="text-center text-gray-600 mb-4">Select your pickup location below.</p>
+                 <div class="grid grid-cols-1 sm:grid-cols-2 gap-4 mb-6">
+                    <button id="hostelBtn" class="flex items-center justify-center p-4 bg-white rounded-lg shadow-md hover:bg-blue-50 border-2 border-transparent transition-all">
+                        <span class="text-xl font-semibold text-gray-700">Hostel</span>
+                    </button>
+                    <button id="collegeBtn" class="flex items-center justify-center p-4 bg-white rounded-lg shadow-md hover:bg-green-50 border-2 border-transparent transition-all">
+                        <span class="text-xl font-semibold text-gray-700">College</span>
+                    </button>
+                </div>
+
+                <!-- === STUDENT MAP === -->
+                <div class="bg-white p-4 rounded-lg shadow-md mb-6">
+                    <h3 class="font-bold text-gray-700 mb-2">Driver's Live Location:</h3>
+                    <div id="map-container">
+                        <!-- === REPLACE THIS IMAGE LINK === -->
+                        <img id="map-image-student" src="https://i.postimg.cc/2SMWqxmZ/Screenshot-2025-10-28-210325.png" alt="Route Map" class="w-full rounded-lg bg-white">
+                        <div id="driver-dot"></div>
+                    </div>
+                </div>
+                <!-- === END STUDENT MAP === -->
+
+                <div class="bg-white p-4 rounded-lg shadow-md">
+                    <h3 class="font-bold text-gray-700 mb-2">Important Contacts:</h3>
+                    <p><strong>Driver:</strong> <span id="driver-contact-student">Loading...</span></p>
+                </div>
+            </div>
+
+            <!-- == DRIVER DASHBOARD == -->
+            <div id="driver-dashboard" class="hidden flex-grow flex flex-col">
+                <div class="grid grid-cols-1 sm:grid-cols-2 gap-4 mb-4">
+                    <div class="p-4 bg-blue-500 text-white rounded-lg shadow-lg text-center">
+                        <p class="text-lg font-semibold">Hostel</p>
+                        <p id="hostelCount" class="text-4xl font-bold">0</p>
+                    </div>
+                    <div class="p-4 bg-green-500 text-white rounded-lg shadow-lg text-center">
+                        <p class="text-lg font-semibold">College</p>
+                        <p id="collegeCount" class="text-4xl font-bold">0</p>
+                    </div>
+                </div>
+
+                <!-- === REPLACE THIS IMAGE LINK === -->
+                <img id="route-map" src="https://i.postimg.cc/2SMWqxmZ/Screenshot-2025-10-28-210325.png" alt="Route Map" class="w-full rounded-lg shadow-lg mb-4 bg-white">
+                
+                <!-- === DRIVER LOCATION BUTTON === -->
+                <div class="bg-white p-4 rounded-lg shadow-md mb-4">
+                     <button id="startTrackingBtn" class="w-full bg-cyan-600 text-white font-bold py-2 px-4 rounded-lg hover:bg-cyan-700 transition-all">Start Sharing Location</button>
+                     <p id="location-status" class="text-xs text-center text-gray-500 mt-2"></p>
+                </div>
+                
+                <div class="bg-white p-4 rounded-lg shadow-md mb-4 flex-grow flex flex-col">
+                    <h3 class="font-bold text-gray-800 mb-2 pb-2 border-b">Waiting Students:</h3>
+                    <div id="student-list-container" class="overflow-y-auto flex-grow">
+                        <ul id="student-list" class="divide-y divide-gray-200">
+                            <li class="py-3 text-gray-500 text-center">No students have checked in yet.</li>
+                        </ul>
+                    </div>
+                </div>
+
+                <div class="bg-white p-4 rounded-lg shadow-md mb-4">
+                    <h3 class="font-bold text-gray-800 mb-2">Update Daily Note:</h3>
+                    <textarea id="noteInput" class="w-full p-2 border border-gray-300 rounded mb-2 focus:ring-2 focus:ring-blue-500 focus:outline-none" placeholder="e.g., Running 10 mins late."></textarea>
+                    <button id="postNoteBtn" class="w-full bg-blue-600 text-white font-bold py-2 px-4 rounded-lg hover:bg-blue-700 transition-all">Post Note</button>
+                </div>
+
+                <div class="bg-white p-4 rounded-lg shadow-md">
+                    <h3 class="font-bold text-gray-700 mb-2">Important Contacts:</h3>
+                    <p><strong>Hostel Warden:</strong> +91 98765 43210</p>
+
+                </div>
+            </div>
+             <div id="status" class="text-center text-gray-500 mt-4 h-6"></div>
+        </div>
+
+    </div>
+
+    <!-- 
+      === THE FIX IS HERE ===
+      I changed typeF="module" back to type="module".
+      This will make the JavaScript run again.
+    -->
+    <script type="module">
+        import { initializeApp } from "https://www.gstatic.com/firebasejs/11.6.1/firebase-app.js";
+        import { getAuth, onAuthStateChanged, GoogleAuthProvider, signInWithPopup, signOut } from "https://www.gstatic.com/firebasejs/11.6.1/firebase-auth.js";
+        import { getFirestore, doc, setDoc, getDoc, onSnapshot, collection, deleteDoc, query, getDocs } from "https://www.gstatic.com/firebasejs/11.6.1/firebase-firestore.js";
+
+        // --- CONFIG (FIXED) ---
+        const appId = typeof __app_id !== 'undefined' ? __app_id : 'cab-pickup-app-final';
+        
+        const firebaseConfig = {
+            apiKey: "AIzaSyB3ghXe-hfJ3bpAuYi4i-JMUnIj79-4C8I",
+            authDomain: "cab-pickup.firebaseapp.com",
+            projectId: "cab-pickup",
+            storageBucket: "cab-pickup.firebasestorage.app",
+            messagingSenderId: "980225850951",
+            appId: "1:980225850951:web:798cfb89ba4d8cb1e5fb62",
+            measurementId: "G-VZRN67WK01"
+        };
+        
+        const app = initializeApp(firebaseConfig);
+        const auth = getAuth(app);
+        const db = getFirestore(app);
+        
+        // --- COLLECTIONS ---
+        const usersCollectionPath = `artifacts/${appId}/public/data/users`;
+        const locationsCollectionPath = `artifacts/${appId}/public/data/locations`;
+        const announcementDocPath = `artifacts/${appId}/public/data/announcement/current`;
+        const driverLocationDocPath = `artifacts/${appId}/public/data/driverLocation/live`;
+
+        // --- DOM ELEMENTS ---
+        const views = {
+            login: document.getElementById('login-view'),
+            profile: document.getElementById('profile-view'),
+            app: document.getElementById('app-view')
+        };
+        const studentLoginBtn = document.getElementById('studentLoginBtn');
+        const driverLoginBtn = document.getElementById('driverLoginBtn');
+        const saveProfileBtn = document.getElementById('saveProfileBtn');
+        const logoutBtn = document.getElementById('logoutBtn');
+        const nameInput = document.getElementById('nameInput');
+        const phoneInput = document.getElementById('phoneInput');
+        const studentDashboard = document.getElementById('student-dashboard');
+        const driverDashboard = document.getElementById('driver-dashboard');
+        const studentList = document.getElementById('student-list');
+        const noteInput = document.getElementById('noteInput');
+        const postNoteBtn = document.getElementById('postNoteBtn');
+        const announcementBanner = document.getElementById('announcement-banner');
+        const announcementText = document.getElementById('announcement-text');
+        const hostelBtn = document.getElementById('hostelBtn');
+        const collegeBtn = document.getElementById('collegeBtn');
+        const hostelCountEl = document.getElementById('hostelCount');
+        const collegeCountEl = document.getElementById('collegeCount');
+        const driverContactStudent = document.getElementById('driver-contact-student');
+        const statusEl = document.getElementById('status');
+        const headerTitle = document.getElementById('header-title');
+        
+        const startTrackingBtn = document.getElementById('startTrackingBtn');
+        const locationStatus = document.getElementById('location-status');
+        const driverDot = document.getElementById('driver-dot');
+        const mapContainer = document.getElementById('map-container');
+        
+        // --- APP STATE ---
+        let currentUser = null;
+        let userRole = null;
+        let unsubscribeListeners = [];
+        let locationWatcher = null;
+        // NEW: Store previous counts to check for beep
+        let lastHostelCount = 0;
+        let lastCollegeCount = 0;
+
+        // --- UI CONTROL ---
+        function showView(viewId) {
+            Object.values(views).forEach(v => v.style.display = 'none');
+            views[viewId].style.display = 'flex';
+        }
+
+        // --- AUTH & ROUTING ---
+        onAuthStateChanged(auth, async (user) => {
+            if (user) {
+                currentUser = user;
+                const userDocRef = doc(db, usersCollectionPath, user.uid);
+                const userDoc = await getDoc(userDocRef);
+                if (userDoc.exists()) {
+                    userRole = userDoc.data().role;
+                    headerTitle.textContent = userRole === 'driver' ? 'Driver Dashboard' : 'Student Dashboard';
+                    showView('app');
+                    driverDashboard.style.display = userRole === 'driver' ? 'flex' : 'none';
+                    studentDashboard.style.display = userRole === 'student' ? 'block' : 'none';
+                    startAppListeners();
+                } else {
+                    showView('profile');
+                }
+            } else {
+                currentUser = null;
+                userRole = null;
+                unsubscribeAll();
+                showView('login');
+            }
+        });
+        
+        const handleLogin = async (role) => {
+            try {
+                // NEW: Ensure Tone.js is started on user interaction
+                if (Tone.context.state !== 'running') {
+                    await Tone.start();
+                }
+                const result = await signInWithPopup(auth, new GoogleAuthProvider());
+                const userDoc = await getDoc(doc(db, usersCollectionPath, result.user.uid));
+                if (!userDoc.exists()) {
+                    userRole = role; 
+                    showView('profile');
+                }
+            } catch (error) { console.error("Login Error:", error); statusEl.textContent = "Login failed. Please try again."; }
+        };
+        
+        studentLoginBtn.addEventListener('click', () => handleLogin('student'));
+        driverLoginBtn.addEventListener('click', () => handleLogin('driver'));
+        
+        logoutBtn.addEventListener('click', () => {
+            signOut(auth);
+            hostelBtn.classList.remove('selected-btn');
+            collegeBtn.classList.remove('selected-btn');
+        });
+
+        saveProfileBtn.addEventListener('click', async () => {
+            const name = nameInput.value.trim();
+            const phone = phoneInput.value.trim();
+            if (name && phone && currentUser && phone.match(/^\d{10}$/)) {
+                await setDoc(doc(db, usersCollectionPath, currentUser.uid), {
+                    uid: currentUser.uid, name, phone, email: currentUser.email, role: userRole
+                });
+                
+                headerTitle.textContent = userRole === 'driver' ? 'Driver Dashboard' : 'Student Dashboard';
+                showView('app');
+                driverDashboard.style.display = userRole === 'driver' ? 'flex' : 'none';
+                studentDashboard.style.display = userRole === 'student' ? 'block' : 'none';
+                startAppListeners();
+
+            } else { 
+                statusEl.textContent = "Please fill in a valid name and 10-digit phone number.";
+                setTimeout(() => statusEl.textContent = '', 3000);
+            }
+        });
+
+        // --- REAL-TIME LISTENERS ---
+        function startAppListeners() {
+            unsubscribeAll(); 
+
+            const unsubAnnouncement = onSnapshot(doc(db, announcementDocPath), (docSnap) => {
+                const exists = docSnap.exists() && docSnap.data().text && docSnap.data().text.trim() !== "";
+                announcementBanner.style.display = exists ? 'block' : 'none';
+                if (exists) announcementText.innerText = docSnap.data().text;
+            });
+            unsubscribeListeners.push(unsubAnnouncement);
+
+            if (userRole === 'driver') {
+                const unsubLocationsDriver = onSnapshot(collection(db, locationsCollectionPath), (snapshot) => {
+                    const checkedInStudents = snapshot.docs.map(d => d.data());
+                    updateDriverDashboard(checkedInStudents);
+                });
+                 unsubscribeListeners.push(unsubLocationsDriver);
+            }
+            
+            if (userRole === 'student') {
+                const unsubLocationsStudent = onSnapshot(collection(db, locationsCollectionPath), (snapshot) => {
+                     const userChoice = snapshot.docs.find(d => d.data().userId === currentUser?.uid)?.data().locationName;
+                     updateStudentButtons(userChoice);
+                });
+                 unsubscribeListeners.push(unsubLocationsStudent);
+
+                 const q = query(collection(db, usersCollectionPath));
+                 const unsubDriverContact = onSnapshot(q, (snapshot) => {
+                     const driver = snapshot.docs.find(d => d.data().role === 'driver');
+                     if (driver) {
+                        driverContactStudent.innerText = `${driver.data().name} - ${driver.data().phone}`;
+                     } else {
+                        driverContactStudent.innerText = "Driver not registered yet."
+                     }
+                 });
+                 unsubscribeListeners.push(unsubDriverContact);
+                 
+                 const unsubDriverLocation = onSnapshot(doc(db, driverLocationDocPath), updateDriverDot);
+                 unsubscribeListeners.push(unsubDriverLocation);
+            }
+        }
+        
+        function unsubscribeAll() {
+            unsubscribeListeners.forEach(unsub => unsub());
+            unsubscribeListeners = [];
+            if (locationWatcher) {
+                navigator.geolocation.clearWatch(locationWatcher);
+                locationWatcher = null;
+            }
+            // Reset counts on logout
+            lastHostelCount = 0;
+            lastCollegeCount = 0;
+        }
+
+        // --- NEW: Beep function ---
+        function playBeep() {
+            // Check if Tone.js is running
+            if (Tone.context.state !== 'running') {
+                Tone.start();
+            }
+            // Create a simple synth and play a note
+            const synth = new Tone.Synth().toDestination();
+            synth.triggerAttackRelease("C5", "8n"); // Plays a C5 note for an eighth note duration
+        }
+
+        // --- DRIVER FUNCTIONS ---
+        postNoteBtn.addEventListener('click', async () => {
+            const text = noteInput.value.trim();
+            await setDoc(doc(db, announcementDocPath), { text, timestamp: new Date() });
+            statusEl.textContent = "Note posted successfully!";
+            noteInput.value = '';
+            setTimeout(()=>statusEl.textContent = "", 3000);
+        });
+
+        async function updateDriverDashboard(checkedInStudents) {
+            // Get new counts
+            const newHostelCount = checkedInStudents.filter(s => s.locationName === 'Hostel').length;
+            const newCollegeCount = checkedInStudents.filter(s => s.locationName === 'College').length;
+
+            // Update the UI
+            hostelCountEl.textContent = newHostelCount;
+            collegeCountEl.textContent = newCollegeCount;
+            
+            // --- NEW BEEP LOGIC ---
+            // Play sound only if the count goes *above* 2 from a lower number
+            if ((newHostelCount > 2 && newHostelCount > lastHostelCount) || (newCollegeCount > 2 && newCollegeCount > lastCollegeCount)) {
+                playBeep();
+            }
+            // Update the last counts for the next check
+            lastHostelCount = newHostelCount;
+            lastCollegeCount = newCollegeCount;
+            // --- END BEEP LOGIC ---
+
+            studentList.innerHTML = '';
+            if (checkedInStudents.length === 0) {
+                studentList.innerHTML = `<li class="py-3 text-gray-500 text-center">No students have checked in yet.</li>`;
+                return;
+            }
+
+            const userDocs = await getDocs(collection(db, usersCollectionPath));
+            const usersMap = new Map(userDocs.docs.map(d => [d.id, d.data()]));
+
+            for (const student of checkedInStudents) {
+                const userData = usersMap.get(student.userId);
+                if (userData) {
+                    const listItem = document.createElement('li');
+                    listItem.className = 'py-3 flex justify-between items-center text-sm';
+                    listItem.innerHTML = `
+                        <div>
+                            <p class="font-semibold text-gray-800">${userData.name}</p>
+                            <p class="text-xs text-gray-500">${student.locationName}</p>
+                        </div>
+                        <a href="tel:${userData.phone}" class="text-blue-600 hover:underline">${userData.phone}</a>`;
+                    studentList.appendChild(listItem);
+                }
+            }
+        }
+
+        // --- Driver GPS tracking functions ---
+        startTrackingBtn.addEventListener('click', () => {
+            if (locationWatcher) {
+                navigator.geolocation.clearWatch(locationWatcher);
+                locationWatcher = null;
+                locationStatus.textContent = "Location sharing stopped.";
+                startTrackingBtn.textContent = "Start Sharing Location";
+                startTrackingBtn.classList.replace('bg-red-600', 'bg-cyan-600');
+                return;
+            }
+
+            if ('geolocation' in navigator) {
+                locationStatus.textContent = "Attempting to get location...";
+                locationWatcher = navigator.geolocation.watchPosition(
+                    updateLocationToFirestore, 
+                    handleLocationError, 
+                    { enableHighAccuracy: true, timeout: 10000, maximumAge: 0 }
+                );
+                startTrackingBtn.textContent = "Stop Sharing Location";
+                startTrackingBtn.classList.replace('bg-cyan-600', 'bg-red-600');
+            } else {
+                locationStatus.textContent = "Geolocation is not supported by this browser.";
+            }
+        });
+
+        async function updateLocationToFirestore(position) {
+            const { latitude, longitude } = position.coords;
+            locationStatus.textContent = "Location shared at " + new Date().toLocaleTimeString();
+            try {
+                await setDoc(doc(db, driverLocationDocPath), {
+                    latitude,
+                    longitude,
+                    timestamp: new Date()
+                });
+            } catch (error) {
+                console.error("Error writing location to Firestore: ", error);
+                locationStatus.textContent = "Error saving location.";
+            }
+        }
+
+        function handleLocationError(error) {
+            if (error.code === error.PERMISSION_DENIED) {
+                locationStatus.textContent = "Error: You must allow location access.";
+            } else {
+                locationStatus.textContent = `Error: ${error.message}`;
+            }
+            if (locationWatcher) {
+                navigator.geolocation.clearWatch(locationWatcher);
+                locationWatcher = null;
+            }
+            startTrackingBtn.textContent = "Start Sharing Location";
+            startTrackingBtn.classList.replace('bg-red-600', 'bg-cyan-600');
+        }
+
+        // --- STUDENT FUNCTIONS ---
+        async function handleLocationSelection(locationName) {
+            const locationDocRef = doc(db, locationsCollectionPath, currentUser.uid);
+            const currentLocationDoc = await getDoc(locationDocRef);
+            
+            if (currentLocationDoc.exists() && currentLocationDoc.data().locationName === locationName) {
+                 await deleteDoc(locationDocRef);
+                 statusEl.textContent = `You have been checked out.`;
+            } else {
+                 statusEl.textContent = `Checking you in at ${locationName}...`;
+                 await setDoc(locationDocRef, {
+                    userId: currentUser.uid, locationName, timestamp: new Date()
+                });
+                statusEl.textContent = `You are checked in at ${locationName}!`;
+            }
+            setTimeout(() => statusEl.textContent = '', 3000);
+        }
+        
+        function updateStudentButtons(userChoice) {
+            hostelBtn.classList.toggle('selected-btn', userChoice === 'Hostel');
+            collegeBtn.classList.toggle('selected-btn', userChoice === 'College');
+        }
+
+        hostelBtn.addEventListener('click', () => handleLocationSelection('Hostel'));
+        collegeBtn.addEventListener('click', () => handleLocationSelection('College'));
+
+        // --- Student function to move the red dot ---
+        function updateDriverDot(docSnap) {
+            if (docSnap.exists()) {
+                const { latitude, longitude } = docSnap.data();
+                
+                const { x, y } = mapGpsToPixels(latitude, longitude);
+                
+                const mapWidth = mapContainer.clientWidth;
+                const mapHeight = mapContainer.clientHeight;
+
+                if (mapWidth > 0 && mapHeight > 0) {
+                    driverDot.style.left = `${x * 100}%`;
+                    driverDot.style.top = `${y * 100}%`;
+                    driverDot.style.display = 'block';
+                }
+            } else {
+                driverDot.style.display = 'none';
+            }
+        }
+
+        function mapGpsToPixels(latitude, longitude) {
+            // --- !!! THIS IS THE CALIBRATION STEP !!! ---
+            // You MUST replace these placeholder numbers.
+            const mapBounds = {
+                // Point 1: Top-Left of your map (e.g., Hostel)
+                latStart: 26.8530,  // <-- REPLACE with your Hostel Latitude
+                lonStart: 75.8050,  // <-- REPLACE with your Hostel Longitude
+                
+                // Point 2: Bottom-Right of your map (e.g., College)
+                latEnd:   26.8480,  // <-- REPLACE with your College Latitude
+                lonEnd:   75.8150   // <-- REPLACE with your College Longitude
+            };
+            // --- !!! END OF CALIBRATION !!! ---
+
+            let xPercent = (longitude - mapBounds.lonStart) / (mapBounds.lonEnd - mapBounds.lonStart);
+            let yPercent = (latitude - mapBounds.latStart) / (mapBounds.latEnd - mapBounds.latStart);
+
+            xPercent = Math.max(0, Math.min(1, xPercent));
+            yPercent = Math.max(0, Math.min(1, yPercent));
+
+            return { x: xPercent, y: yPercent };
+        }
+
+
+        // --- INITIAL LOAD ---
+        showView('login');
+    </script>
+</body>
+</html>

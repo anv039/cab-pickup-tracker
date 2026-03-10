@@ -35,10 +35,3 @@ A high-performance, real-time web application engineered to solve daily transit 
 
 ---
 
-## 👨‍💻 Author
-**[YOUR NAME HERE]**
-* **GitHub:** [@anv039](https://github.com/anv039)
-* **LinkedIn:** [YOUR LINKEDIN URL HERE]
-
----
-*Developed for efficient student transit coordination at Dahmi Kalan.*
